@@ -1,0 +1,362 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profit Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #e0f2fe, #f3f4f6);
+        }
+        .tab-content {
+            transition: all 0.3s ease;
+        }
+        .tab-button {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .tab-button.active {
+            background: linear-gradient(to right, #3b82f6, #1e3a8a);
+            color: white;
+        }
+        .tab-button.inactive {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        .tab-button:hover {
+            background: #dbeafe;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            ring: 2px solid #3b82f6;
+            box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="font-sans min-h-screen">
+    <div class="container mx-auto p-6 max-w-md">
+        <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-8">eBay/TCGPlayer/Custom Profit Calculator</h1>
+        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+            <!-- Tab Navigation -->
+            <div class="flex border-b-2 border-gray-200 mb-6">
+                <button id="simpleTab" class="tab-button active flex-1 p-3 text-center font-semibold rounded-tl-lg">Simple Calculator</button>
+                <button id="feesTab" class="tab-button inactive flex-1 p-3 text-center font-semibold rounded-tr-lg">Edit Fees</button>
+            </div>
+            <!-- Simple Calculator Tab -->
+            <div id="simpleCalculator" class="tab-content">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Platform</label>
+                        <select id="platform" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg bg-gray-50">
+                            <option value="ebay">eBay</option>
+                            <option value="tcgplayer">TCGPlayer</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Sell Price ($)</label>
+                        <input type="number" id="salePrice" step="0.01" min="0" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg bg-gray-50" placeholder="Enter sell price">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Buy Price ($)</label>
+                        <input type="number" id="itemCost" step="0.01" min="0" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg bg-gray-50" placeholder="Enter buy price">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Shipping Cost ($)</label>
+                        <input type="number" id="shippingCost" step="0.01" min="0" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg bg-gray-50" placeholder="Enter shipping cost">
+                    </div>
+                    <div>
+                        <label class="flex items-center text-sm font-medium text-gray-700">
+                            <input type="checkbox" id="buyerPaysShipping" class="mr-2 h-4 w-4 text-blue-600">
+                            Buyer Pays Shipping
+                        </label>
+                    </div>
+                    <button id="calculateButton" onclick="calculateProfit()" class="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white p-3 rounded-lg hover:from-blue-600 hover:to-blue-800 transition-colors">Calculate Profit</button>
+                </div>
+                <div id="simpleResult" class="mt-6 p-4 bg-gray-50 rounded-lg"></div>
+            </div>
+            <!-- Fees Editor Tab -->
+            <div id="feesEditor" class="tab-content hidden">
+                <div class="mb-4">
+                    <p class="text-sm text-gray-600 mb-2">Edit fees below. eBay and TCGPlayer have default fees, but you must enter all fees for Custom. Lines with // explain each fee. Save fees before calculating with Custom. Clear cache (Ctrl+Shift+R) if the page looks old.</p>
+                    <label class="block text-sm font-medium text-gray-700">Fee Structure</label>
+                    <textarea id="feesJson" rows="12" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm" placeholder="Enter fee structure"></textarea>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="saveFees()" class="flex-1 bg-gradient-to-r from-blue-500 to-blue-700 text-white p-3 rounded-lg hover:from-blue-600 hover:to-blue-800 transition-colors">Save Fees</button>
+                    <button onclick="clearAllData()" class="flex-1 bg-gradient-to-r from-red-500 to-red-700 text-white p-3 rounded-lg hover:from-red-600 hover:to-red-800 transition-colors">Clear All Data</button>
+                </div>
+                <div id="feesResult" class="mt-4 text-center text-sm"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Default fee structure with comments
+        const defaultFees = {
+            ebay: {
+                // % of total sale (item + shipping if buyer pays). Ex: 0.1325 = 13.25% fee.
+                salesFeePercent: 0.1325,
+                // % fee for payment processing (item price only). Ex: 0.027 = 2.7% fee.
+                paymentFeePercent: 0.027,
+                // Fixed $ for payment processing per sale. Ex: 0.25 = $0.25.
+                paymentFeeFixed: 0.25,
+                // Extra fixed $ fee per sale. Ex: 0.0 = no extra fee for eBay.
+                transactionFee: 0.0
+            },
+            tcgplayer: {
+                // % of total sale (item + shipping if buyer pays). Ex: 0.1035 = 10.35% fee.
+                salesFeePercent: 0.1035,
+                // % fee for payment processing (item price only). Ex: 0.025 = 2.5% fee.
+                paymentFeePercent: 0.025,
+                // Fixed $ for payment processing per sale. Ex: 0.30 = $0.30.
+                paymentFeeFixed: 0.30,
+                // Extra fixed $ fee per sale. Ex: 0.50 = $0.50 for TCGPlayer.
+                transactionFee: 0.50
+            },
+            custom: {
+                // % of total sale (item + shipping if buyer pays). Ex: 0.10 = 10% fee. Enter your platform's fee.
+                salesFeePercent: 0.0,
+                // % fee for payment processing (item price only). Ex: 0.029 = 2.9% fee. Enter your platform's fee.
+                paymentFeePercent: 0.0,
+                // Fixed $ for payment processing per sale. Ex: 0.30 = $0.30. Enter your platform's fee.
+                paymentFeeFixed: 0.0,
+                // Extra fixed $ fee per sale. Ex: 0.50 = $0.50. Enter 0.0 if none.
+                transactionFee: 0.0
+            }
+        };
+
+        // Tab switching
+        const feesTab = document.getElementById('feesTab');
+        const simpleTab = document.getElementById('simpleTab');
+        const feesEditor = document.getElementById('feesEditor');
+        const simpleCalculator = document.getElementById('simpleCalculator');
+        const calculateButton = document.getElementById('calculateButton');
+
+        feesTab.addEventListener('click', () => {
+            feesTab.classList.add('active');
+            feesTab.classList.remove('inactive');
+            simpleTab.classList.remove('active');
+            simpleTab.classList.add('inactive');
+            feesEditor.classList.remove('hidden');
+            simpleCalculator.classList.add('hidden');
+        });
+
+        simpleTab.addEventListener('click', () => {
+            simpleTab.classList.add('active');
+            simpleTab.classList.remove('inactive');
+            feesTab.classList.remove('active');
+            feesTab.classList.add('inactive');
+            simpleCalculator.classList.remove('hidden');
+            feesEditor.classList.add('hidden');
+            updateCalculateButton();
+        });
+
+        // Check if valid fees exist for the selected platform
+        function hasValidFees(platform) {
+            try {
+                const feesJson = localStorage.getItem('feesJson');
+                if (!feesJson) return platform !== 'custom';
+                const fees = JSON.parse(feesJson);
+                if (!fees[platform]) return platform !== 'custom';
+                return !isNaN(fees[platform].salesFeePercent) && fees[platform].salesFeePercent >= 0 &&
+                       !isNaN(fees[platform].paymentFeePercent) && fees[platform].paymentFeePercent >= 0 &&
+                       !isNaN(fees[platform].paymentFeeFixed) && fees[platform].paymentFeeFixed >= 0 &&
+                       !isNaN(fees[platform].transactionFee) && fees[platform].transactionFee >= 0;
+            } catch (e) {
+                console.error('Error checking fees:', e);
+                return platform !== 'custom';
+            }
+        }
+
+        // Update Calculate button state
+        function updateCalculateButton() {
+            const platform = document.getElementById('platform').value;
+            calculateButton.disabled = !hasValidFees(platform);
+            if (calculateButton.disabled) {
+                document.getElementById('simpleResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Please save valid fees for Custom in the Edit Fees tab before calculating.</p>
+                `;
+            } else {
+                document.getElementById('simpleResult').innerHTML = '';
+            }
+        }
+
+        // Load saved data
+        window.onload = function() {
+            let feesJson = localStorage.getItem('feesJson');
+            if (!feesJson) {
+                feesJson = JSON.stringify(defaultFees, null, 2);
+                localStorage.setItem('feesJson', feesJson);
+            }
+            document.getElementById('feesJson').value = feesJson;
+
+            const inputs = ['platform', 'salePrice', 'itemCost', 'shippingCost', 'buyerPaysShipping'];
+            inputs.forEach(id => {
+                const value = localStorage.getItem(id);
+                if (value) {
+                    if (id === 'buyerPaysShipping') {
+                        document.getElementById(id).checked = value === 'true';
+                    } else {
+                        document.getElementById(id).value = value;
+                    }
+                }
+            });
+            updateCalculateButton();
+            document.getElementById('platform').addEventListener('change', updateCalculateButton);
+        };
+
+        // Save inputs to localStorage
+        document.querySelectorAll('input, select').forEach(element => {
+            element.addEventListener('change', () => {
+                localStorage.setItem(element.id, element.type === 'checkbox' ? element.checked : element.value);
+                if (element.id === 'platform') updateCalculateButton();
+            });
+        });
+
+        function saveFees() {
+            const feesJson = document.getElementById('feesJson').value;
+            try {
+                const parsed = JSON.parse(feesJson);
+                if (!parsed.ebay || !parsed.tcgplayer || !parsed.custom ||
+                    isNaN(parsed.ebay.salesFeePercent) || isNaN(parsed.tcgplayer.salesFeePercent) || isNaN(parsed.custom.salesFeePercent) ||
+                    isNaN(parsed.ebay.paymentFeePercent) || isNaN(parsed.tcgplayer.paymentFeePercent) || isNaN(parsed.custom.paymentFeePercent) ||
+                    isNaN(parsed.ebay.paymentFeeFixed) || isNaN(parsed.tcgplayer.paymentFeeFixed) || isNaN(parsed.custom.paymentFeeFixed) ||
+                    isNaN(parsed.ebay.transactionFee) || isNaN(parsed.tcgplayer.transactionFee) || isNaN(parsed.custom.transactionFee)) {
+                    throw new Error('Missing or invalid fields');
+                }
+                localStorage.setItem('feesJson', feesJson);
+                document.getElementById('feesResult').innerHTML = '<p class="text-green-600 font-medium">Fees saved successfully!</p>';
+                updateCalculateButton();
+                console.log('Saved fees:', parsed);
+            } catch (e) {
+                document.getElementById('feesResult').innerHTML = '<p class="text-red-600 font-medium">Error: Invalid format. Include all fields (salesFeePercent, paymentFeePercent, paymentFeeFixed, transactionFee) with valid numbers for eBay, TCGPlayer, and Custom.</p>';
+                console.error('Error saving fees:', e);
+            }
+        }
+
+        function clearAllData() {
+            localStorage.clear();
+            document.getElementById('feesJson').value = JSON.stringify(defaultFees, null, 2);
+            document.getElementById('platform').value = 'ebay';
+            document.getElementById('salePrice').value = '';
+            document.getElementById('itemCost').value = '';
+            document.getElementById('shippingCost').value = '';
+            document.getElementById('buyerPaysShipping').checked = false;
+            document.getElementById('feesResult').innerHTML = '<p class="text-green-600 font-medium">All data cleared and reset to default!</p>';
+            document.getElementById('simpleResult').innerHTML = '';
+            updateCalculateButton();
+            console.log('All localStorage data cleared');
+        }
+
+        function calculateProfit() {
+            // Get inputs
+            const platform = document.getElementById('platform').value;
+            const salePrice = parseFloat(document.getElementById('salePrice').value) || 0;
+            const itemCost = parseFloat(document.getElementById('itemCost').value) || 0;
+            const shippingCost = parseFloat(document.getElementById('shippingCost').value) || 0;
+            const buyerPaysShipping = document.getElementById('buyerPaysShipping').checked;
+
+            // Log inputs
+            console.log('Inputs:', { platform, salePrice, itemCost, shippingCost, buyerPaysShipping });
+
+            // Validate inputs
+            if (isNaN(salePrice) || salePrice < 0 || isNaN(itemCost) || itemCost < 0 || isNaN(shippingCost) || shippingCost < 0) {
+                document.getElementById('simpleResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Error: Enter valid positive numbers for Sell Price, Buy Price, and Shipping Cost.</p>
+                `;
+                console.error('Invalid inputs:', { salePrice, itemCost, shippingCost });
+                return;
+            }
+
+            // Load fees
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+                if (!fees[platform] || isNaN(fees[platform].salesFeePercent)) {
+                    throw new Error('Invalid fee structure for ' + platform);
+                }
+                console.log('Loaded fees:', fees[platform]);
+            } catch (e) {
+                console.error('Error loading fees:', e);
+                fees = defaultFees;
+                localStorage.setItem('feesJson', JSON.stringify(defaultFees, null, 2));
+                if (platform === 'custom') {
+                    document.getElementById('simpleResult').innerHTML = `
+                        <p class="text-red-600 font-medium">Error: Invalid fees for Custom. Please save valid fees in the Edit Fees tab.</p>
+                    `;
+                    calculateButton.disabled = true;
+                    return;
+                }
+            }
+
+            const platformFees = fees[platform] || defaultFees[platform];
+
+            // Calculate fees
+            const feeBase = buyerPaysShipping ? salePrice + shippingCost : salePrice;
+            const totalFees = (feeBase * platformFees.salesFeePercent) +
+                              (salePrice * platformFees.paymentFeePercent) +
+                              platformFees.paymentFeeFixed +
+                              platformFees.transactionFee;
+
+            console.log('Calculated:', { feeBase, totalFees });
+
+            // Calculate net profit
+            const netProfit = salePrice - itemCost - (buyerPaysShipping ? 0 : shippingCost) - totalFees;
+
+            // Display results
+            document.getElementById('simpleResult').innerHTML = `
+                <h2 class="text-lg font-semibold text-gray-800">Results</h2>
+                <p class="text-gray-700">Sale Price: <span class="font-medium">$${salePrice.toFixed(2)}</span></p>
+                <p class="text-gray-700">Item Cost: <span class="font-medium">$${itemCost.toFixed(2)}</span></p>
+                <p class="text-gray-700">Shipping Cost: <span class="font-medium">$${shippingCost.toFixed(2)}</span> (${buyerPaysShipping ? 'Buyer Paid' : 'Seller Paid'})</p>
+                <p class="text-gray-700">Fees: <span class="font-medium">$${totalFees.toFixed(2)}</span></p>
+                <p class="text-gray-800 font-bold mt-2">Net Profit: <span class="text-green-600">$${netProfit.toFixed(2)}</span></p>
+            `;
+            console.log('Results displayed:', { salePrice, itemCost, shippingCost, totalFees, netProfit });
+        }
+    </script>
+</body>
+</html>
