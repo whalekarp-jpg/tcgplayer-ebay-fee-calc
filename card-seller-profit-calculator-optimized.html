@@ -1,0 +1,1164 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Seller Profit Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: #A5ACAF; /* Eagles Silver */
+            color: #000000; /* Eagles Black */
+        }
+        .tab-content {
+            transition: opacity 0.2s ease;
+        }
+        .tab-button {
+            background: #A5ACAF; /* Eagles Silver */
+            color: #000000; /* Eagles Black */
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .tab-button.active {
+            background: #004C54; /* Eagles Midnight Green */
+            color: #FFFFFF; /* Eagles White */
+        }
+        .tab-button:hover {
+            background: #006064; /* Lighter Green for hover */
+        }
+        input, select, textarea {
+            border: 1px solid #A5ACAF; /* Eagles Silver */
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            background: #FFFFFF; /* Eagles White */
+            width: 100%;
+            font-size: 1.1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            color: #000000; /* Eagles Black */
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #004C54; /* Eagles Midnight Green */
+            box-shadow: 0 0 5px rgba(0, 76, 84, 0.5);
+        }
+        button {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            width: 100%;
+            transition: transform 0.2s ease;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button.green {
+            background: #004C54; /* Eagles Midnight Green */
+            color: #FFFFFF; /* Eagles White */
+        }
+        button.orange {
+            background: #006064; /* Lighter Green for secondary */
+            color: #FFFFFF; /* Eagles White */
+        }
+        button.red {
+            background: #DC143C; /* Red for contrast */
+            color: #FFFFFF; /* Eagles White */
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result-box {
+            background: #FFFFFF; /* Eagles White */
+            border: 1px solid #A5ACAF; /* Eagles Silver */
+        }
+    </style>
+</head>
+<body class="font-sans min-h-screen">
+    <div class="container mx-auto p-4 max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6">Card Seller Profit Calculator</h1>
+        <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+            <!-- Tab Navigation -->
+            <div class="flex flex-wrap border-b border-gray-200 mb-4">
+                <button id="simpleTab" class="tab-button active flex-1 p-2 text-center">Calculator</button>
+                <button id="shippingTab" class="tab-button flex-1 p-2 text-center">Shipping</button>
+                <button id="marginTab" class="tab-button flex-1 p-2 text-center">Margin</button>
+                <button id="feesTab" class="tab-button flex-1 p-2 text-center">Fees</button>
+            </div>
+            <!-- Simple Calculator Tab -->
+            <div id="simpleCalculator" class="tab-content">
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium">Platform</label>
+                        <select id="platform" title="Choose the selling platform" class="mt-1">
+                            <option value="ebay">eBay</option>
+                            <option value="tcgplayer">TCGPlayer</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium">Sell Price ($)</label>
+                        <input type="number" id="salePrice" step="0.01" min="0" class="mt-1" placeholder="Enter sell price ($)" title="Price you sell the item for">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium">Buy Price ($)</label>
+                        <input type="number" id="itemCost" step="0.01" min="0" class="mt-1" placeholder="Enter buy price ($)" title="Price you paid for the item">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium">Shipping Cost ($)</label>
+<small class="block text-right text-xs mt-1">
+    <button onclick="setActiveTab(shippingTab, shippingCalculator)" class="underline text-blue-700 hover:text-blue-900">Estimate shipping cost</button>
+</small>
+
+                        <input type="number" id="shippingCost" step="0.01" min="0" class="mt-1" placeholder="Enter shipping cost ($)" title="Shipping cost (use Shipping tab to estimate)">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium">Tax State</label>
+                        <select id="taxState" title="Select state or leave empty for no tax" class="mt-1">
+                            <option value="0" selected>Leave Empty (0%)</option>
+                            <option value="4.00">Alabama (4.00%)</option>
+                            <option value="0.00">Alaska (0.00%)</option>
+                            <option value="5.70">Arizona (5.60%)</option>
+                            <option value="6.50">Arkansas (6.50%)</option>
+                            <option value="8.68">California (8.68%)</option>
+                            <option value="2.90">Colorado (2.90%)</option>
+                            <option value="6.35">Connecticut (6.35%)</option>
+                            <option value="0.00">Delaware (0.00%)</option>
+                            <option value="6.00">Florida (6.00%)</option>
+                            <option value="4.00">Georgia (4.00%)</option>
+                            <option value="4.00">Hawaii (4.00%)</option>
+                            <option value="6.00">Idaho (6.00%)</option>
+                            <option value="6.25">Illinois (6.25%)</option>
+                            <option value="7.00">Indiana (7.00%)</option>
+                            <option value="6.00">Iowa (6.00%)</option>
+                            <option value="6.50">Kansas (6.50%)</option>
+                            <option value="6.00">Kentucky (6.00%)</option>
+                            <option value="4.45">Louisiana (4.45%)</option>
+                            <option value="5.50">Maine (5.50%)</option>
+                            <option value="6.00">Maryland (6.00%)</option>
+                            <option value="6.25">Massachusetts (6.25%)</option>
+                            <option value="6.00">Michigan (6.00%)</option>
+                            <option value="6.88">Minnesota (6.88%)</option>
+                            <option value="7.00">Mississippi (7.00%)</option>
+                            <option value="4.23">Missouri (4.23%)</option>
+                            <option value="0.00">Montana (0.00%)</option>
+                            <option value="5.50">Nebraska (5.50%)</option>
+                            <option value="6.85">Nevada (6.85%)</option>
+                            <option value="0.00">New Hampshire (0.00%)</option>
+                            <option value="6.63">New Jersey (6.63%)</option>
+                            <option value="5.13">New Mexico (5.13%)</option>
+                            <option value="4.00">New York (4.00%)</option>
+                            <option value="4.75">North Carolina (4.75%)</option>
+                            <option value="5.00">North Dakota (5.00%)</option>
+                            <option value="5.75">Ohio (5.75%)</option>
+                            <option value="4.50">Oklahoma (4.50%)</option>
+                            <option value="0.00">Oregon (0.00%)</option>
+                            <option value="6.00">Pennsylvania (6.00%)</option>
+                            <option value="7.00">Rhode Island (7.00%)</option>
+                            <option value="6.00">South Carolina (6.00%)</option>
+                            <option value="4.50">South Dakota (4.50%)</option>
+                            <option value="7.00">Tennessee (7.00%)</option>
+                            <option value="6.25">Texas (6.25%)</option>
+                            <option value="6.10">Utah (6.10%)</option>
+                            <option value="6.00">Vermont (6.00%)</option>
+                            <option value="5.30">Virginia (5.30%)</option>
+                            <option value="6.50">Washington (6.50%)</option>
+                            <option value="6.00">West Virginia (6.00%)</option>
+                            <option value="5.00">Wisconsin (5.00%)</option>
+                            <option value="4.00">Wyoming (4.00%)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="flex items-center text-sm font-medium">
+                            <input type="checkbox" id="buyerPaysShipping" class="mr-2 h-4 w-4 text-green-600" title="Check if buyer pays shipping">
+                            Buyer Pays Shipping
+                        </label>
+                    </div>
+                    <button onclick="toggleShippingDetails()" class="green">Show/Hide Shipping Details</button>
+                    <div id="shippingDetails" class="space-y-3 hidden">
+                        <div>
+                            <label class="block text-sm font-medium">Item Type</label>
+                            <select id="itemType" title="Select Card or Box (affects supplies)" class="mt-1">
+                                <option value="card">Card</option>
+                                <option value="box">Box</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Packaging Type</label>
+                            <select id="packagingType" title="Cards 0-13 oz use envelope, >13-29 oz use bubble mailer" class="mt-1">
+                                <option value="envelope" selected>Envelope</option>
+                                <option value="bubbleMailer">Bubble Mailer</option>
+                                <option value="box">Box</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Item Weight (oz)</label>
+                            <input type="number" id="itemWeight" step="0.01" min="0" class="mt-1" placeholder="Enter weight (oz)" title="Weight in ounces (use Shipping tab for presets)">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="calculateButton" onclick="calculateProfit()" class="green">Calculate Profit</button>
+                        <button onclick="calculateBreakEven()" class="orange">Break Even</button>
+                        <button onclick="calculateTargetProfit(0.10)" class="orange">10% Profit</button>
+                        <button onclick="calculateTargetProfit(0.20)" class="orange">20% Profit</button>
+                        <button onclick="calculateTargetProfit(0.30)" class="orange">30% Profit</button>
+                    </div>
+                </div>
+                <div id="simpleResult" class="mt-4 p-3 rounded-lg result-box"></div>
+            </div>
+            <!-- Shipping Calculator Tab -->
+            <div id="shippingCalculator" class="tab-content hidden">
+                <div class="space-y-4">
+                    <p class="text-sm">Estimate shipping cost (approximate, ±10% due to carrier rates). Cards 0-13 oz use envelope, >13-29 oz use bubble mailer, presets use box. Domestic only.</p>
+                    <div class="grid grid-cols-1 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium">Box Preset</label>
+                            <select id="boxPreset" title="Select a box type or None for custom weight" class="mt-1">
+                                <option value="none">None</option>
+                                <option value="booster">Booster Box (19.2 oz, 5.25 x 4.75 x 2.5 in)</option>
+                                <option value="etb">Elite Trainer Box (27.2 oz, 7.5 x 6.5 x 3.5 in)</option>
+                                <option value="collection">Collection Box (32 oz, 12 x 12 x 3 in)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Item Type</label>
+                            <select id="shippingItemType" title="Select Card or Box" class="mt-1">
+                                <option value="card">Card</option>
+                                <option value="box">Box</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Number of Cards</label>
+                            <input type="number" id="numCards" step="1" min="0" class="mt-1" placeholder="Enter number of cards (0-13 for envelope)" title="Number of cards (0.1 oz each, affects weight)">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Packaging Type</label>
+                            <select id="packagingTypeShipping" title="Cards 0-13 oz use envelope, >13-29 oz use bubble mailer, presets use box" class="mt-1">
+                                <option value="envelope" selected>Envelope</option>
+                                <option value="bubbleMailer">Bubble Mailer</option>
+                                <option value="box">Box</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Item Weight (oz)</label>
+                            <input type="number" id="itemWeight" step="0.01" min="0" class="mt-1" placeholder="Enter weight (oz)" title="Weight in ounces (auto-filled for presets or cards)">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="calculateShipping()" class="green">Calculate Shipping</button>
+                        <button onclick="copyToCalculator()" class="orange">Copy to Calculator</button>
+                    </div>
+                </div>
+                <div id="shippingResult" class="mt-4 p-3 rounded-lg result-box"></div>
+            </div>
+            <!-- Profit Margin Tab -->
+            <div id="marginVisualizer" class="tab-content hidden">
+                <p class="text-sm mb-3">Profit margins for sale prices $1 to $50.</p>
+                <canvas id="marginChart" class="w-full"></canvas>
+            </div>
+            <!-- Fees Editor Tab -->
+            <div id="feesEditor" class="tab-content hidden">
+                <div class="mb-3">
+                    <p class="text-sm mb-2">Edit fees, shipping rates, supplies, and box presets. Save before using Custom or Shipping. Clear cache (Ctrl+Shift+R) if issues occur.</p>
+                    <label class="block text-sm font-medium">Settings</label>
+                    <textarea id="feesJson" rows="8" class="mt-1 block w-full p-3 border rounded-lg font-mono text-sm" title="Edit fees and supplies in JSON format"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="saveFees()" class="green">Save Settings</button>
+                    <button onclick="clearAllData()" class="red">Clear All Data</button>
+                </div>
+                <div id="feesResult" class="mt-3 text-center text-sm"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Default fee, shipping rate, supply cost, and box preset structure
+        const defaultFees = {
+            ebay: {
+                salesFeePercent: 0.1325,
+                paymentFeePercent: 0.027,
+                paymentFeeFixed: 0.25,
+                transactionFee: 0.0
+            },
+            tcgplayer: {
+                salesFeePercent: 0.1035,
+                paymentFeePercent: 0.025,
+                paymentFeeFixed: 0.30,
+                transactionFee: 0.50
+            },
+            custom: {
+                salesFeePercent: 0.0,
+                paymentFeePercent: 0.0,
+                paymentFeeFixed: 0.0,
+                transactionFee: 0.0
+            },
+            shippingRates: {
+                booster: { ground: 5.00, priority: 18.00 },
+                etb: { ground: 6.00, priority: 20.00 },
+                collection: { ground: 9.00, priority: 25.00 }
+            },
+            supplyCosts: {
+                pennySleeve: 0.02,
+                toploader: 0.10,
+                teamBag: 0.05,
+                paper: 0.01,
+                envelope: 0.10,
+                stampFirstOz: 0.79,
+                stampAdditionalOz: 0.29,
+                bubbleMailer: 0.75,
+                mediumBox: 1.25,
+                largeBox: 2.00,
+                tapeLabels: 0.375
+            },
+            boxPresets: {
+                booster: { weight: 19.2, dimensions: "5.25 x 4.75 x 2.5 in" },
+                etb: { weight: 27.2, dimensions: "7.5 x 6.5 x 3.5 in" },
+                collection: { weight: 32, dimensions: "12 x 12 x 3 in" }
+            }
+        };
+
+        // Initialize Chart.js
+        let marginChart;
+        function initChart() {
+            const ctx = document.getElementById('marginChart').getContext('2d');
+            marginChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Profit Margin (%)',
+                        data: [],
+                        borderColor: '#004C54', /* Eagles Midnight Green */
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Sale Price ($)', color: '#000000' }, ticks: { color: '#000000' } },
+                        y: { title: { display: true, text: 'Profit Margin (%)', color: '#000000' }, beginAtZero: true, ticks: { color: '#000000' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#000000' } }
+                    }
+                }
+            });
+        }
+
+        // Tab switching
+        const simpleTab = document.getElementById('simpleTab');
+        const shippingTab = document.getElementById('shippingTab');
+        const marginTab = document.getElementById('marginTab');
+        const feesTab = document.getElementById('feesTab');
+        const simpleCalculator = document.getElementById('simpleCalculator');
+        const shippingCalculator = document.getElementById('shippingCalculator');
+        const marginVisualizer = document.getElementById('marginVisualizer');
+        const feesEditor = document.getElementById('feesEditor');
+        const calculateButton = document.getElementById('calculateButton');
+
+        function setActiveTab(activeTab, activeContent) {
+            [simpleTab, shippingTab, marginTab, feesTab].forEach(tab => {
+                tab.classList.toggle('active', tab === activeTab);
+                tab.classList.toggle('inactive', tab !== activeTab);
+            });
+            [simpleCalculator, shippingCalculator, marginVisualizer, feesEditor].forEach(content => {
+                content.classList.toggle('hidden', content !== activeContent);
+            });
+            if (activeTab === marginTab) updateMarginChart();
+            if (activeTab === simpleTab) updateCalculateButton();
+        }
+
+        simpleTab.addEventListener('click', () => setActiveTab(simpleTab, simpleCalculator));
+        shippingTab.addEventListener('click', () => setActiveTab(shippingTab, shippingCalculator));
+        marginTab.addEventListener('click', () => setActiveTab(marginTab, marginVisualizer));
+        feesTab.addEventListener('click', () => setActiveTab(feesTab, feesEditor));
+
+        // Toggle shipping details section
+        function toggleShippingDetails() {
+            const shippingDetails = document.getElementById('shippingDetails');
+            shippingDetails.classList.toggle('hidden');
+            console.log('Shipping details toggled:', !shippingDetails.classList.contains('hidden'));
+        }
+
+        // Check if valid fees exist for the selected platform
+        function hasValidFees(platform) {
+            try {
+                const feesJson = localStorage.getItem('feesJson');
+                if (!feesJson) return platform !== 'custom';
+                const fees = JSON.parse(feesJson);
+                if (!fees[platform]) return platform !== 'custom';
+                return !isNaN(fees[platform].salesFeePercent) && fees[platform].salesFeePercent >= 0 &&
+                       !isNaN(fees[platform].paymentFeePercent) && fees[platform].paymentFeePercent >= 0 &&
+                       !isNaN(fees[platform].paymentFeeFixed) && fees[platform].paymentFeeFixed >= 0 &&
+                       !isNaN(fees[platform].transactionFee) && fees[platform].transactionFee >= 0;
+            } catch (e) {
+                console.error('Error checking fees:', e);
+                return platform !== 'custom';
+            }
+        }
+
+        // Update Calculate button state
+        function updateCalculateButton() {
+            const platform = document.getElementById('platform').value;
+            calculateButton.disabled = !hasValidFees(platform);
+            if (calculateButton.disabled) {
+                document.getElementById('simpleResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Please save valid fees for Custom in the Fees tab.</p>
+                `;
+            } else {
+                document.getElementById('simpleResult').innerHTML = '';
+            }
+        }
+
+        // Update shipping inputs based on box preset and number of cards
+        function updateShippingInputs() {
+            const boxPreset = document.getElementById('boxPreset').value;
+            const itemWeight = document.getElementById('itemWeight');
+            const shippingItemType = document.getElementById('shippingItemType');
+            const packagingTypeShipping = document.getElementById('packagingTypeShipping');
+            const numCards = document.getElementById('numCards');
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+            } catch (e) {
+                fees = defaultFees;
+            }
+            const boxPresets = fees.boxPresets || defaultFees.boxPresets;
+
+            if (boxPreset !== 'none') {
+                itemWeight.value = boxPresets[boxPreset].weight;
+                itemWeight.disabled = true;
+                shippingItemType.value = 'box';
+                shippingItemType.disabled = true;
+                packagingTypeShipping.value = 'box';
+                packagingTypeShipping.disabled = true;
+                numCards.value = '';
+                numCards.disabled = true;
+                localStorage.setItem('itemWeight', boxPresets[boxPreset].weight);
+                localStorage.setItem('shippingItemType', 'box');
+                localStorage.setItem('packagingTypeShipping', 'box');
+                localStorage.setItem('numCards', '');
+            } else {
+                itemWeight.disabled = false;
+                shippingItemType.disabled = false;
+                packagingTypeShipping.disabled = false;
+                numCards.disabled = shippingItemType.value !== 'card';
+                if (shippingItemType.value === 'card') {
+                    const cards = parseInt(numCards.value) || 0;
+                    itemWeight.value = cards * 0.1;
+                    localStorage.setItem('itemWeight', itemWeight.value);
+                    updatePackagingOptions();
+                }
+            }
+            console.log('Shipping inputs updated:', { boxPreset, itemWeight: itemWeight.value, itemType: shippingItemType.value, packaging: packagingTypeShipping.value, numCards: numCards.value });
+        }
+
+        // Update packaging options based on item type and weight
+        function updatePackagingOptions() {
+            const itemType = document.getElementById('itemType').value;
+            const itemWeight = parseFloat(document.getElementById('itemWeight').value) || 0;
+            const packagingType = document.getElementById('packagingType');
+            const shippingItemType = document.getElementById('shippingItemType').value;
+            const packagingTypeShipping = document.getElementById('packagingTypeShipping');
+            const numCards = parseInt(document.getElementById('numCards').value) || 0;
+
+            if (itemType === 'card' && itemWeight > 13 && itemWeight <= 29) {
+                packagingType.value = 'bubbleMailer';
+                packagingType.disabled = true;
+                localStorage.setItem('packagingType', 'bubbleMailer');
+            } else if (itemType === 'card' && itemWeight > 29) {
+                packagingType.value = 'box';
+                packagingType.disabled = true;
+                localStorage.setItem('packagingType', 'box');
+            } else {
+                packagingType.disabled = false;
+            }
+
+            if (shippingItemType === 'card' && numCards > 0 && numCards <= 13) {
+                packagingTypeShipping.value = 'envelope';
+                packagingTypeShipping.disabled = true;
+                localStorage.setItem('packagingTypeShipping', 'envelope');
+            } else if (shippingItemType === 'card' && itemWeight > 13 && itemWeight <= 29) {
+                packagingTypeShipping.value = 'bubbleMailer';
+                packagingTypeShipping.disabled = true;
+                localStorage.setItem('packagingTypeShipping', 'bubbleMailer');
+            } else if (shippingItemType === 'card' && itemWeight > 29) {
+                packagingTypeShipping.value = 'box';
+                packagingTypeShipping.disabled = true;
+                localStorage.setItem('packagingTypeShipping', 'box');
+            } else {
+                packagingTypeShipping.disabled = false;
+            }
+            console.log('Packaging options updated:', { itemType, itemWeight, packagingType: packagingType.value, shippingItemType, packagingTypeShipping: packagingTypeShipping.value, numCards });
+        }
+
+        // Load saved data
+        window.onload = function() {
+            let feesJson = localStorage.getItem('feesJson');
+            if (!feesJson) {
+                feesJson = JSON.stringify(defaultFees, null, 2);
+                localStorage.setItem('feesJson', feesJson);
+            }
+            document.getElementById('feesJson').value = feesJson;
+
+            const inputs = ['platform', 'itemType', 'packagingType', 'salePrice', 'itemCost', 'shippingCost', 'taxState', 'buyerPaysShipping', 'boxPreset', 'itemWeight', 'shippingItemType', 'packagingTypeShipping', 'numCards'];
+            inputs.forEach(id => {
+                const value = localStorage.getItem(id);
+                if (value) {
+                    if (id === 'buyerPaysShipping') {
+                        document.getElementById(id).checked = value === 'true';
+                    } else {
+                        document.getElementById(id).value = value;
+                    }
+                } else if (id === 'packagingType' || id === 'packagingTypeShipping') {
+                    document.getElementById(id).value = 'envelope';
+                    localStorage.setItem(id, 'envelope');
+                }
+            });
+            updateCalculateButton();
+            updateShippingInputs();
+            updatePackagingOptions();
+            document.getElementById('platform').addEventListener('change', updateCalculateButton);
+            document.getElementById('itemType').addEventListener('change', updatePackagingOptions);
+            document.getElementById('itemWeight').addEventListener('change', updatePackagingOptions);
+            document.getElementById('boxPreset').addEventListener('change', updateShippingInputs);
+            document.getElementById('shippingItemType').addEventListener('change', () => {
+                document.getElementById('numCards').disabled = document.getElementById('shippingItemType').value !== 'card';
+                updateShippingInputs();
+            });
+            document.getElementById('numCards').addEventListener('change', () => {
+                const numCards = parseInt(document.getElementById('numCards').value) || 0;
+                if (document.getElementById('shippingItemType').value === 'card') {
+                    document.getElementById('itemWeight').value = (numCards * 0.1).toFixed(2);
+                    localStorage.setItem('itemWeight', document.getElementById('itemWeight').value);
+                    updatePackagingOptions();
+                }
+                localStorage.setItem('numCards', numCards);
+            });
+            initChart();
+        };
+
+        // Save inputs to localStorage
+        document.querySelectorAll('input, select').forEach(element => {
+            element.addEventListener('change', () => {
+                localStorage.setItem(element.id, element.type === 'checkbox' ? element.checked : element.value);
+                if (element.id === 'platform') updateCalculateButton();
+                if (['platform', 'itemType', 'packagingType', 'itemCost', 'shippingCost', 'taxState', 'buyerPaysShipping', 'itemWeight'].includes(element.id)) updateMarginChart();
+                if (element.id === 'itemType' || element.id === 'itemWeight') updatePackagingOptions();
+                if (element.id === 'boxPreset' || element.id === 'shippingItemType' || element.id === 'numCards') updateShippingInputs();
+            });
+        });
+
+        function saveFees() {
+            const feesJson = document.getElementById('feesJson').value;
+            try {
+                const parsed = JSON.parse(feesJson);
+                if (!parsed.ebay || !parsed.tcgplayer || !parsed.custom || !parsed.shippingRates || !parsed.supplyCosts || !parsed.boxPresets ||
+                    isNaN(parsed.ebay.salesFeePercent) || isNaN(parsed.tcgplayer.salesFeePercent) || isNaN(parsed.custom.salesFeePercent) ||
+                    isNaN(parsed.ebay.paymentFeePercent) || isNaN(parsed.tcgplayer.paymentFeePercent) || isNaN(parsed.custom.paymentFeePercent) ||
+                    isNaN(parsed.ebay.paymentFeeFixed) || isNaN(parsed.tcgplayer.paymentFeeFixed) || isNaN(parsed.custom.paymentFeeFixed) ||
+                    isNaN(parsed.ebay.transactionFee) || isNaN(parsed.tcgplayer.transactionFee) || isNaN(parsed.custom.transactionFee) ||
+                    isNaN(parsed.shippingRates.booster.ground) || isNaN(parsed.shippingRates.booster.priority) ||
+                    isNaN(parsed.shippingRates.etb.ground) || isNaN(parsed.shippingRates.etb.priority) ||
+                    isNaN(parsed.shippingRates.collection.ground) || isNaN(parsed.shippingRates.collection.priority) ||
+                    isNaN(parsed.supplyCosts.pennySleeve) || isNaN(parsed.supplyCosts.toploader) ||
+                    isNaN(parsed.supplyCosts.teamBag) || isNaN(parsed.supplyCosts.paper) ||
+                    isNaN(parsed.supplyCosts.envelope) || isNaN(parsed.supplyCosts.stampFirstOz) ||
+                    isNaN(parsed.supplyCosts.stampAdditionalOz) || isNaN(parsed.supplyCosts.bubbleMailer) ||
+                    isNaN(parsed.supplyCosts.mediumBox) || isNaN(parsed.supplyCosts.largeBox) ||
+                    isNaN(parsed.supplyCosts.tapeLabels) ||
+                    isNaN(parsed.boxPresets.booster.weight) || isNaN(parsed.boxPresets.etb.weight) || isNaN(parsed.boxPresets.collection.weight)) {
+                    throw new Error('Missing or invalid fields');
+                }
+                localStorage.setItem('feesJson', feesJson);
+                document.getElementById('feesResult').innerHTML = '<p class="text-green-600 font-medium">Settings saved successfully!</p>';
+                updateCalculateButton();
+                updateShippingInputs();
+                console.log('Saved fees:', parsed);
+            } catch (e) {
+                document.getElementById('feesResult').innerHTML = '<p class="text-red-600 font-medium">Error: Invalid JSON. Include all fields for eBay, TCGPlayer, Custom, shippingRates, supplyCosts, and boxPresets with valid numbers.</p>';
+                console.error('Error saving fees:', e);
+            }
+        }
+
+        function clearAllData() {
+            localStorage.clear();
+            document.getElementById('feesJson').value = JSON.stringify(defaultFees, null, 2);
+            document.getElementById('platform').value = 'ebay';
+            document.getElementById('itemType').value = 'card';
+            document.getElementById('packagingType').value = 'envelope';
+            document.getElementById('packagingTypeShipping').value = 'envelope';
+            document.getElementById('salePrice').value = '';
+            document.getElementById('itemCost').value = '';
+            document.getElementById('shippingCost').value = '';
+            document.getElementById('taxState').value = '0';
+            document.getElementById('buyerPaysShipping').checked = false;
+            document.getElementById('boxPreset').value = 'none';
+            document.getElementById('itemWeight').value = '';
+            document.getElementById('numCards').value = '';
+            document.getElementById('shippingItemType').value = 'card';
+            document.getElementById('shippingDetails').classList.add('hidden');
+            document.getElementById('feesResult').innerHTML = '<p class="text-green-600 font-medium">All data cleared and reset!</p>';
+            document.getElementById('simpleResult').innerHTML = '';
+            document.getElementById('shippingResult').innerHTML = '';
+            updateCalculateButton();
+            updateShippingInputs();
+            updatePackagingOptions();
+            updateMarginChart();
+            console.log('All localStorage data cleared');
+        }
+
+        function calculateProfit() {
+            const platform = document.getElementById('platform').value;
+            const itemType = document.getElementById('itemType').value;
+            const packagingType = document.getElementById('packagingType').value;
+            const salePrice = parseFloat(document.getElementById('salePrice').value) || 0;
+            const itemCost = parseFloat(document.getElementById('itemCost').value) || 0;
+            const shippingCost = parseFloat(document.getElementById('shippingCost').value) || 0;
+            const taxRate = parseFloat(document.getElementById('taxState').value) || 0;
+            const buyerPaysShipping = document.getElementById('buyerPaysShipping').checked;
+            const itemWeight = parseFloat(document.getElementById('itemWeight').value) || 0;
+            const shippingDetailsVisible = !document.getElementById('shippingDetails').classList.contains('hidden');
+
+            console.log('Inputs:', { platform, itemType, packagingType, salePrice, itemCost, shippingCost, taxRate, buyerPaysShipping, itemWeight, shippingDetailsVisible });
+
+            if (isNaN(salePrice) || salePrice < 0 || isNaN(itemCost) || itemCost < 0 || isNaN(shippingCost) || shippingCost < 0) {
+                document.getElementById('simpleResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Error: Enter valid positive numbers for Sell Price, Buy Price, and Shipping Cost.</p>
+                `;
+                console.error('Invalid inputs:', { salePrice, itemCost, shippingCost, taxRate });
+                return;
+            }
+
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+                if (!fees[platform] || isNaN(fees[platform].salesFeePercent) || !fees.supplyCosts) {
+                    throw new Error('Invalid fee or supply structure for ' + platform);
+                }
+                console.log('Loaded fees:', fees[platform], 'Supply costs:', fees.supplyCosts);
+            } catch (e) {
+                console.error('Error loading fees:', e);
+                fees = defaultFees;
+                localStorage.setItem('feesJson', JSON.stringify(defaultFees, null, 2));
+                if (platform === 'custom') {
+                    document.getElementById('simpleResult').innerHTML = `
+                        <p class="text-red-600 font-medium">Error: Invalid fees for Custom. Please save valid fees in the Fees tab.</p>
+                    `;
+                    calculateButton.disabled = true;
+                    return;
+                }
+            }
+
+            const platformFees = fees[platform] || defaultFees[platform];
+            const supplyCosts = fees.supplyCosts || defaultFees.supplyCosts;
+            const boxPresets = fees.boxPresets || defaultFees.boxPresets;
+            let effectivePackaging = shippingDetailsVisible ? packagingType : 'envelope';
+            let effectiveItemWeight = shippingDetailsVisible ? itemWeight : 0;
+            let effectiveItemType = shippingDetailsVisible ? itemType : 'card';
+
+            if (shippingDetailsVisible) {
+                if (effectiveItemType === 'card' && effectiveItemWeight > 13 && effectiveItemWeight <= 29) {
+                    effectivePackaging = 'bubbleMailer';
+                    document.getElementById('packagingType').value = 'bubbleMailer';
+                    localStorage.setItem('packagingType', 'bubbleMailer');
+                } else if (effectiveItemType === 'card' && effectiveItemWeight > 29) {
+                    effectivePackaging = 'box';
+                    document.getElementById('packagingType').value = 'box';
+                    localStorage.setItem('packagingType', 'box');
+                }
+                if (['booster', 'etb', 'collection'].includes(document.getElementById('boxPreset').value)) {
+                    effectivePackaging = 'box';
+                    effectiveItemType = 'box';
+                    effectiveItemWeight = boxPresets[document.getElementById('boxPreset').value]?.weight || effectiveItemWeight;
+                }
+            }
+
+            let totalSupplyCost = 0;
+            if (shippingDetailsVisible && effectiveItemType === 'card' && effectivePackaging === 'envelope') {
+                totalSupplyCost = supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag + supplyCosts.paper + supplyCosts.envelope +
+                                  (effectiveItemWeight <= 1 ? supplyCosts.stampFirstOz : supplyCosts.stampFirstOz + (Math.ceil(effectiveItemWeight - 1) * supplyCosts.stampAdditionalOz));
+            } else if (effectivePackaging === 'bubbleMailer') {
+                totalSupplyCost = supplyCosts.bubbleMailer + supplyCosts.tapeLabels;
+                if (effectiveItemType === 'card') {
+                    totalSupplyCost += supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag;
+                }
+            } else if (effectivePackaging === 'box') {
+                totalSupplyCost = (effectiveItemWeight <= 27.2 ? supplyCosts.mediumBox : supplyCosts.largeBox) + supplyCosts.tapeLabels;
+            }
+
+            const feeBase = buyerPaysShipping ? salePrice + shippingCost : salePrice;
+            const totalFees = (feeBase * platformFees.salesFeePercent) +
+                              (salePrice * platformFees.paymentFeePercent) +
+                              platformFees.paymentFeeFixed +
+                              platformFees.transactionFee;
+            const taxAmount = salePrice * (taxRate / 100);
+            const netProfit = salePrice - itemCost - (buyerPaysShipping ? 0 : shippingCost) - totalFees - taxAmount - totalSupplyCost;
+
+            console.log('Calculated:', { feeBase, totalFees, taxAmount, totalSupplyCost, netProfit });
+
+            document.getElementById('simpleResult').innerHTML = `
+                <h2 class="text-lg font-semibold">Results</h2>
+                <p>Sale Price: <span class="font-medium">$${salePrice.toFixed(2)}</span></p>
+                <p>Item Cost: <span class="font-medium">$${itemCost.toFixed(2)}</span></p>
+                <p>Shipping Cost: <span class="font-medium">$${shippingCost.toFixed(2)}</span> (${buyerPaysShipping ? 'Buyer Paid' : 'Seller Paid'})</p>
+                ${shippingDetailsVisible ? `<p>Item Type: <span class="font-medium">${effectiveItemType.charAt(0).toUpperCase() + effectiveItemType.slice(1)}</span></p>` : ''}
+                ${shippingDetailsVisible ? `<p>Packaging: <span class="font-medium">${effectivePackaging.charAt(0).toUpperCase() + effectivePackaging.slice(1)}</span></p>` : ''}
+                ${shippingDetailsVisible ? `<p>Item Weight: <span class="font-medium">${effectiveItemWeight.toFixed(2)} oz</span></p>` : ''}
+                <p>Supply Cost: <span class="font-medium">$${totalSupplyCost.toFixed(2)}</span></p>
+                <p>Fees: <span class="font-medium">$${totalFees.toFixed(2)}</span></p>
+                <p>Tax (${taxRate.toFixed(2)}%): <span class="font-medium">$${taxAmount.toFixed(2)}</span></p>
+                <p class="font-bold mt-2">Net Profit: <span class="text-green-600">$${netProfit.toFixed(2)}</span></p>
+            `;
+            console.log('Results displayed:', { salePrice, itemCost, shippingCost, effectiveItemType, effectivePackaging, effectiveItemWeight, totalSupplyCost, totalFees, taxAmount, netProfit });
+        }
+
+        function calculateBreakEven() {
+            const platform = document.getElementById('platform').value;
+            const itemType = document.getElementById('itemType').value;
+            const packagingType = document.getElementById('packagingType').value;
+            const itemCost = parseFloat(document.getElementById('itemCost').value) || 0;
+            const shippingCost = parseFloat(document.getElementById('shippingCost').value) || 0;
+            const taxRate = parseFloat(document.getElementById('taxState').value) || 0;
+            const buyerPaysShipping = document.getElementById('buyerPaysShipping').checked;
+            const itemWeight = parseFloat(document.getElementById('itemWeight').value) || 0;
+            const shippingDetailsVisible = !document.getElementById('shippingDetails').classList.contains('hidden');
+
+            console.log('Break-Even Inputs:', { platform, itemType, packagingType, itemCost, shippingCost, taxRate, buyerPaysShipping, itemWeight, shippingDetailsVisible });
+
+            if (isNaN(itemCost) || itemCost < 0 || isNaN(shippingCost) || shippingCost < 0) {
+                document.getElementById('simpleResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Error: Enter valid positive numbers for Buy Price and Shipping Cost.</p>
+                `;
+                console.error('Invalid break-even inputs:', { itemCost, shippingCost, taxRate });
+                return;
+            }
+
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+                if (!fees[platform] || isNaN(fees[platform].salesFeePercent) || !fees.supplyCosts) {
+                    throw new Error('Invalid fee or supply structure for ' + platform);
+                }
+                console.log('Loaded fees for break-even:', fees[platform], 'Supply costs:', fees.supplyCosts);
+            } catch (e) {
+                console.error('Error loading fees:', e);
+                fees = defaultFees;
+                localStorage.setItem('feesJson', JSON.stringify(defaultFees, null, 2));
+                if (platform === 'custom') {
+                    document.getElementById('simpleResult').innerHTML = `
+                        <p class="text-red-600 font-medium">Error: Invalid fees for Custom. Please save valid fees in the Fees tab.</p>
+                    `;
+                    calculateButton.disabled = true;
+                    return;
+                }
+            }
+
+            const platformFees = fees[platform] || defaultFees[platform];
+            const supplyCosts = fees.supplyCosts || defaultFees.supplyCosts;
+            const boxPresets = fees.boxPresets || defaultFees.boxPresets;
+            let effectivePackaging = shippingDetailsVisible ? packagingType : 'envelope';
+            let effectiveItemWeight = shippingDetailsVisible ? itemWeight : 0;
+            let effectiveItemType = shippingDetailsVisible ? itemType : 'card';
+
+            if (shippingDetailsVisible) {
+                if (effectiveItemType === 'card' && effectiveItemWeight > 13 && effectiveItemWeight <= 29) {
+                    effectivePackaging = 'bubbleMailer';
+                } else if (effectiveItemType === 'card' && effectiveItemWeight > 29) {
+                    effectivePackaging = 'box';
+                }
+                if (['booster', 'etb', 'collection'].includes(document.getElementById('boxPreset').value)) {
+                    effectivePackaging = 'box';
+                    effectiveItemType = 'box';
+                    effectiveItemWeight = boxPresets[document.getElementById('boxPreset').value]?.weight || effectiveItemWeight;
+                }
+            }
+
+            let totalSupplyCost = 0;
+            if (shippingDetailsVisible && effectiveItemType === 'card' && effectivePackaging === 'envelope') {
+                totalSupplyCost = supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag + supplyCosts.paper + supplyCosts.envelope +
+                                  (effectiveItemWeight <= 1 ? supplyCosts.stampFirstOz : supplyCosts.stampFirstOz + (Math.ceil(effectiveItemWeight - 1) * supplyCosts.stampAdditionalOz));
+            } else if (effectivePackaging === 'bubbleMailer') {
+                totalSupplyCost = supplyCosts.bubbleMailer + supplyCosts.tapeLabels;
+                if (effectiveItemType === 'card') {
+                    totalSupplyCost += supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag;
+                }
+            } else {
+                totalSupplyCost = (effectiveItemWeight <= 27.2 ? supplyCosts.mediumBox : supplyCosts.largeBox) + supplyCosts.tapeLabels;
+            }
+
+            const fixedCosts = itemCost + (buyerPaysShipping ? 0 : shippingCost) + platformFees.paymentFeeFixed + platformFees.transactionFee + totalSupplyCost;
+            const totalFeePercent = platformFees.salesFeePercent + (buyerPaysShipping ? 0 : platformFees.paymentFeePercent) + (taxRate / 100);
+            const breakEvenPrice = fixedCosts / (1 - totalFeePercent);
+
+            console.log('Break-Even Calculated:', { fixedCosts, totalFeePercent, totalSupplyCost, breakEvenPrice });
+
+            document.getElementById('simpleResult').innerHTML = `
+                <h2 class="text-lg font-semibold">Break-Even Results</h2>
+                <p>Item Cost: <span class="font-medium">$${itemCost.toFixed(2)}</span></p>
+                <p>Shipping Cost: <span class="font-medium">$${shippingCost.toFixed(2)}</span> (${buyerPaysShipping ? 'Buyer Paid' : 'Seller Paid'})</p>
+                ${shippingDetailsVisible ? `<p>Item Type: <span class="font-medium">${effectiveItemType.charAt(0).toUpperCase() + effectiveItemType.slice(1)}</span></p>` : ''}
+                ${shippingDetailsVisible ? `<p>Packaging: <span class="font-medium">${effectivePackaging.charAt(0).toUpperCase() + effectivePackaging.slice(1)}</span></p>` : ''}
+                ${shippingDetailsVisible ? `<p>Item Weight: <span class="font-medium">${effectiveItemWeight.toFixed(2)} oz</span></p>` : ''}
+                <p>Supply Cost: <span class="font-medium">$${totalSupplyCost.toFixed(2)}</span></p>
+                <p>Tax Rate: <span class="font-medium">${taxRate.toFixed(2)}%</span></p>
+                <p class="font-bold mt-2">Break-Even Sale Price: <span class="text-green-600">$${breakEvenPrice.toFixed(2)}</span></p>
+                <p class="text-sm">Selling at this price covers costs with $0 profit.</p>
+            `;
+            console.log('Break-Even Results displayed:', { itemCost, shippingCost, effectiveItemType, effectivePackaging, effectiveItemWeight, totalSupplyCost, taxRate, breakEvenPrice });
+        }
+
+        function calculateTargetProfit(targetMargin) {
+            const platform = document.getElementById('platform').value;
+            const itemType = document.getElementById('itemType').value;
+            const packagingType = document.getElementById('packagingType').value;
+            const itemCost = parseFloat(document.getElementById('itemCost').value) || 0;
+            const shippingCost = parseFloat(document.getElementById('shippingCost').value) || 0;
+            const taxRate = parseFloat(document.getElementById('taxState').value) || 0;
+            const buyerPaysShipping = document.getElementById('buyerPaysShipping').checked;
+            const itemWeight = parseFloat(document.getElementById('itemWeight').value) || 0;
+            const shippingDetailsVisible = !document.getElementById('shippingDetails').classList.contains('hidden');
+
+            console.log('Target Profit Inputs:', { platform, itemType, packagingType, itemCost, shippingCost, taxRate, buyerPaysShipping, itemWeight, shippingDetailsVisible, targetMargin });
+
+            if (isNaN(itemCost) || itemCost < 0 || isNaN(shippingCost) || shippingCost < 0) {
+                document.getElementById('simpleResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Error: Enter valid positive numbers for Buy Price and Shipping Cost.</p>
+                `;
+                console.error('Invalid target profit inputs:', { itemCost, shippingCost, taxRate });
+                return;
+            }
+
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+                if (!fees[platform] || isNaN(fees[platform].salesFeePercent) || !fees.supplyCosts) {
+                    throw new Error('Invalid fee or supply structure for ' + platform);
+                }
+                console.log('Loaded fees for target profit:', fees[platform], 'Supply costs:', fees.supplyCosts);
+            } catch (e) {
+                console.error('Error loading fees:', e);
+                fees = defaultFees;
+                localStorage.setItem('feesJson', JSON.stringify(defaultFees, null, 2));
+                if (platform === 'custom') {
+                    document.getElementById('simpleResult').innerHTML = `
+                        <p class="text-red-600 font-medium">Error: Invalid fees for Custom. Please save valid fees in the Fees tab.</p>
+                    `;
+                    calculateButton.disabled = true;
+                    return;
+                }
+            }
+
+            const platformFees = fees[platform] || defaultFees[platform];
+            const supplyCosts = fees.supplyCosts || defaultFees.supplyCosts;
+            const boxPresets = fees.boxPresets || defaultFees.boxPresets;
+            let effectivePackaging = shippingDetailsVisible ? packagingType : 'envelope';
+            let effectiveItemWeight = shippingDetailsVisible ? itemWeight : 0;
+            let effectiveItemType = shippingDetailsVisible ? itemType : 'card';
+
+            if (shippingDetailsVisible) {
+                if (effectiveItemType === 'card' && effectiveItemWeight > 13 && effectiveItemWeight <= 29) {
+                    effectivePackaging = 'bubbleMailer';
+                } else if (effectiveItemType === 'card' && effectiveItemWeight > 29) {
+                    effectivePackaging = 'box';
+                }
+                if (['booster', 'etb', 'collection'].includes(document.getElementById('boxPreset').value)) {
+                    effectivePackaging = 'box';
+                    effectiveItemType = 'box';
+                    effectiveItemWeight = boxPresets[document.getElementById('boxPreset').value]?.weight || effectiveItemWeight;
+                }
+            }
+
+            let totalSupplyCost = 0;
+            if (shippingDetailsVisible && effectiveItemType === 'card' && effectivePackaging === 'envelope') {
+                totalSupplyCost = supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag + supplyCosts.paper + supplyCosts.envelope +
+                                  (effectiveItemWeight <= 1 ? supplyCosts.stampFirstOz : supplyCosts.stampFirstOz + (Math.ceil(effectiveItemWeight - 1) * supplyCosts.stampAdditionalOz));
+            } else if (effectivePackaging === 'bubbleMailer') {
+                totalSupplyCost = supplyCosts.bubbleMailer + supplyCosts.tapeLabels;
+                if (effectiveItemType === 'card') {
+                    totalSupplyCost += supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag;
+                }
+            } else {
+                totalSupplyCost = (effectiveItemWeight <= 27.2 ? supplyCosts.mediumBox : supplyCosts.largeBox) + supplyCosts.tapeLabels;
+            }
+
+            const fixedCosts = itemCost + (buyerPaysShipping ? 0 : shippingCost) + platformFees.paymentFeeFixed + platformFees.transactionFee + totalSupplyCost;
+            const totalFeePercent = platformFees.salesFeePercent + (buyerPaysShipping ? 0 : platformFees.paymentFeePercent) + (taxRate / 100);
+            const targetSalePrice = fixedCosts / (1 - totalFeePercent - targetMargin);
+
+            console.log('Target Profit Calculated:', { fixedCosts, totalFeePercent, totalSupplyCost, targetMargin, targetSalePrice });
+
+            document.getElementById('simpleResult').innerHTML = `
+                <h2 class="text-lg font-semibold">${(targetMargin * 100).toFixed(0)}% Profit Results</h2>
+                <p>Item Cost: <span class="font-medium">$${itemCost.toFixed(2)}</span></p>
+                <p>Shipping Cost: <span class="font-medium">$${shippingCost.toFixed(2)}</span> (${buyerPaysShipping ? 'Buyer Paid' : 'Seller Paid'})</p>
+                ${shippingDetailsVisible ? `<p>Item Type: <span class="font-medium">${effectiveItemType.charAt(0).toUpperCase() + effectiveItemType.slice(1)}</span></p>` : ''}
+                ${shippingDetailsVisible ? `<p>Packaging: <span class="font-medium">${effectivePackaging.charAt(0).toUpperCase() + effectivePackaging.slice(1)}</span></p>` : ''}
+                ${shippingDetailsVisible ? `<p>Item Weight: <span class="font-medium">${effectiveItemWeight.toFixed(2)} oz</span></p>` : ''}
+                <p>Supply Cost: <span class="font-medium">$${totalSupplyCost.toFixed(2)}</span></p>
+                <p>Tax Rate: <span class="font-medium">${taxRate.toFixed(2)}%</span></p>
+                <p class="font-bold mt-2">Target Sale Price for ${(targetMargin * 100).toFixed(0)}% Profit: <span class="text-green-600">$${targetSalePrice.toFixed(2)}</span></p>
+                <p class="text-sm">List at this price to achieve a ${(targetMargin * 100).toFixed(0)}% profit margin.</p>
+            `;
+            console.log('Target Profit Results displayed:', { itemCost, shippingCost, effectiveItemType, effectivePackaging, effectiveItemWeight, totalSupplyCost, taxRate, targetSalePrice });
+        }
+
+        function calculateShipping() {
+            const boxPreset = document.getElementById('boxPreset').value;
+            const itemType = document.getElementById('shippingItemType').value;
+            const packagingType = document.getElementById('packagingTypeShipping').value;
+            let itemWeight = parseFloat(document.getElementById('itemWeight').value) || 0;
+            const numCards = parseInt(document.getElementById('numCards').value) || 0;
+
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+                if (!fees.shippingRates || !fees.supplyCosts || !fees.boxPresets) {
+                    throw new Error('Invalid shipping rates or supply costs');
+                }
+                console.log('Loaded shipping rates:', fees.shippingRates, 'Supply costs:', fees.supplyCosts, 'Box presets:', fees.boxPresets);
+            } catch (e) {
+                console.error('Error loading shipping rates:', e);
+                fees = defaultFees;
+                localStorage.setItem('feesJson', JSON.stringify(defaultFees, null, 2));
+            }
+
+            const boxPresets = fees.boxPresets || defaultFees.boxPresets;
+            const shippingRates = fees.shippingRates || defaultFees.shippingRates;
+            let effectiveItemType = itemType;
+            let effectivePackaging = packagingType;
+            let effectiveNumCards = numCards;
+
+            if (boxPreset !== 'none') {
+                itemWeight = boxPresets[boxPreset].weight;
+                effectiveItemType = 'box';
+                effectivePackaging = 'box';
+                effectiveNumCards = 0;
+            } else if (effectiveItemType === 'card' && numCards > 0 && numCards <= 13) {
+                itemWeight = numCards * 0.1;
+                effectivePackaging = 'envelope';
+            } else if (effectiveItemType === 'card' && itemWeight > 13 && itemWeight <= 29) {
+                effectivePackaging = 'bubbleMailer';
+                effectiveNumCards = Math.round(itemWeight / 0.1);
+            } else if (effectiveItemType === 'card' && itemWeight > 29) {
+                effectivePackaging = 'box';
+                effectiveNumCards = Math.round(itemWeight / 0.1);
+            }
+
+            console.log('Shipping Inputs:', { boxPreset, effectiveItemType, effectivePackaging, itemWeight, effectiveNumCards });
+
+            if (isNaN(itemWeight) || itemWeight < 0 || (effectiveItemType === 'card' && numCards < 0)) {
+                document.getElementById('shippingResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Error: Enter valid positive numbers for Item Weight and Number of Cards.</p>
+                `;
+                console.error('Invalid shipping input:', { itemWeight, numCards });
+                return;
+            }
+
+            const supplyCosts = fees.supplyCosts || defaultFees.supplyCosts;
+            let totalSupplyCost = 0;
+            let groundCost = 0;
+            let priorityCost = 0;
+
+            if (effectiveItemType === 'card' && effectivePackaging === 'envelope') {
+                totalSupplyCost = supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag + supplyCosts.paper + supplyCosts.envelope +
+                                  (itemWeight <= 1 ? supplyCosts.stampFirstOz : supplyCosts.stampFirstOz + (Math.ceil(itemWeight - 1) * supplyCosts.stampAdditionalOz));
+                groundCost = totalSupplyCost;
+                priorityCost = totalSupplyCost; // Envelope uses stamp pricing for both
+            } else if (effectivePackaging === 'bubbleMailer') {
+                totalSupplyCost = supplyCosts.bubbleMailer + supplyCosts.tapeLabels;
+                if (effectiveItemType === 'card') {
+                    totalSupplyCost += supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag;
+                }
+                groundCost = totalSupplyCost + (itemWeight <= 19.2 ? shippingRates.booster.ground : itemWeight <= 27.2 ? shippingRates.etb.ground : shippingRates.collection.ground);
+                priorityCost = totalSupplyCost + (itemWeight <= 19.2 ? shippingRates.booster.priority : itemWeight <= 27.2 ? shippingRates.etb.priority : shippingRates.collection.priority);
+            } else {
+                totalSupplyCost = (itemWeight <= 27.2 ? supplyCosts.mediumBox : supplyCosts.largeBox) + supplyCosts.tapeLabels;
+                groundCost = totalSupplyCost + (boxPreset === 'booster' ? shippingRates.booster.ground : boxPreset === 'etb' ? shippingRates.etb.ground : boxPreset === 'collection' ? shippingRates.collection.ground : shippingRates.collection.ground);
+                priorityCost = totalSupplyCost + (boxPreset === 'booster' ? shippingRates.booster.priority : boxPreset === 'etb' ? shippingRates.etb.priority : boxPreset === 'collection' ? shippingRates.collection.priority : shippingRates.collection.priority);
+            }
+
+            const groundMin = groundCost * 0.9;
+            const groundMax = groundCost * 1.1;
+            const priorityMin = priorityCost * 0.9;
+            const priorityMax = priorityCost * 1.1;
+
+            document.getElementById('shippingResult').innerHTML = `
+                <h2 class="text-lg font-semibold">Shipping Estimate (±10%)</h2>
+                <p>Item Type: <span class="font-medium">${effectiveItemType.charAt(0).toUpperCase() + effectiveItemType.slice(1)}</span></p>
+                <p>Box Preset: <span class="font-medium">${boxPreset === 'none' ? 'None' : boxPreset.charAt(0).toUpperCase() + boxPreset.slice(1) + ` (${boxPresets[boxPreset]?.dimensions})`}</span></p>
+                <p>Packaging: <span class="font-medium">${effectivePackaging.charAt(0).toUpperCase() + effectivePackaging.slice(1)}</span></p>
+                <p>Item Weight: <span class="font-medium">${itemWeight.toFixed(2)} oz</span></p>
+                ${effectiveItemType === 'card' ? `<p>Number of Cards: <span class="font-medium">${effectiveNumCards}</span> (~0.1 oz each)</p>` : ''}
+                <p>Supply Cost: <span class="font-medium">$${totalSupplyCost.toFixed(2)}</span></p>
+                <p>USPS Ground: <span class="font-medium">$${groundMin.toFixed(2)} - $${groundMax.toFixed(2)}</span></p>
+                <p>USPS Priority: <span class="font-medium">$${priorityMin.toFixed(2)} - $${priorityMax.toFixed(2)}</span></p>
+                <p class="text-sm">Note: Actual cost may vary ±10% due to carrier rates or weight rounding. Domestic shipping only.</p>
+            `;
+            localStorage.setItem('shippingCost', ((groundCost + priorityCost) / 2).toFixed(2)); // Average for Simple Calculator
+            localStorage.setItem('packagingType', effectivePackaging);
+            localStorage.setItem('itemWeight', itemWeight.toFixed(2));
+            localStorage.setItem('shippingItemType', effectiveItemType);
+            localStorage.setItem('numCards', effectiveNumCards);
+            console.log('Shipping Calculated:', { effectiveItemType, boxPreset, effectivePackaging, itemWeight, effectiveNumCards, totalSupplyCost, groundCost, priorityCost, groundMin, groundMax, priorityMin, priorityMax });
+        }
+
+        function copyToCalculator() {
+            const shippingCost = localStorage.getItem('shippingCost');
+            const packagingType = localStorage.getItem('packagingType');
+            const itemWeight = localStorage.getItem('itemWeight');
+            const itemType = localStorage.getItem('shippingItemType');
+            const numCards = localStorage.getItem('numCards');
+            if (shippingCost && packagingType && itemWeight && itemType) {
+                document.getElementById('shippingCost').value = shippingCost;
+                document.getElementById('packagingType').value = packagingType;
+                document.getElementById('itemWeight').value = itemWeight;
+                document.getElementById('itemType').value = itemType;
+                localStorage.setItem('shippingCost', shippingCost);
+                localStorage.setItem('packagingType', packagingType);
+                localStorage.setItem('itemWeight', itemWeight);
+                localStorage.setItem('itemType', itemType);
+                document.getElementById('shippingDetails').classList.remove('hidden');
+                document.getElementById('shippingResult').innerHTML += `
+                    <p class="text-green-600 font-medium mt-2">Shipping cost, packaging, weight, and item type copied to Calculator!</p>
+                `;
+                updatePackagingOptions();
+                console.log('Copied to Calculator:', { shippingCost, packagingType, itemWeight, itemType, numCards });
+            } else {
+                document.getElementById('shippingResult').innerHTML = `
+                    <p class="text-red-600 font-medium">Error: Calculate shipping cost first.</p>
+                `;
+                console.error('No shipping data to copy');
+            }
+        }
+
+        function updateMarginChart() {
+            const platform = document.getElementById('platform').value;
+            const itemType = document.getElementById('itemType').value;
+            const packagingType = document.getElementById('packagingType').value;
+            const itemCost = parseFloat(document.getElementById('itemCost').value) || 0;
+            const shippingCost = parseFloat(document.getElementById('shippingCost').value) || 0;
+            const taxRate = parseFloat(document.getElementById('taxState').value) || 0;
+            const buyerPaysShipping = document.getElementById('buyerPaysShipping').checked;
+            const itemWeight = parseFloat(document.getElementById('itemWeight').value) || 0;
+            const shippingDetailsVisible = !document.getElementById('shippingDetails').classList.contains('hidden');
+
+            if (isNaN(itemCost) || itemCost < 0 || isNaN(shippingCost) || shippingCost < 0) {
+                marginChart.data.labels = [];
+                marginChart.data.datasets[0].data = [];
+                marginChart.update();
+                return;
+            }
+
+            let fees;
+            try {
+                fees = JSON.parse(localStorage.getItem('feesJson')) || defaultFees;
+                if (!fees[platform] || isNaN(fees[platform].salesFeePercent) || !fees.supplyCosts) {
+                    throw new Error('Invalid fee or supply structure for ' + platform);
+                }
+            } catch (e) {
+                console.error('Error loading fees for chart:', e);
+                fees = defaultFees;
+                localStorage.setItem('feesJson', JSON.stringify(defaultFees, null, 2));
+                if (platform === 'custom') {
+                    marginChart.data.labels = [];
+                    marginChart.data.datasets[0].data = [];
+                    marginChart.update();
+                    return;
+                }
+            }
+
+            const platformFees = fees[platform] || defaultFees[platform];
+            const supplyCosts = fees.supplyCosts || defaultFees.supplyCosts;
+            const boxPresets = fees.boxPresets || defaultFees.boxPresets;
+            let effectivePackaging = shippingDetailsVisible ? packagingType : 'envelope';
+            let effectiveItemWeight = shippingDetailsVisible ? itemWeight : 0;
+            let effectiveItemType = shippingDetailsVisible ? itemType : 'card';
+
+            if (shippingDetailsVisible) {
+                if (effectiveItemType === 'card' && effectiveItemWeight > 13 && effectiveItemWeight <= 29) {
+                    effectivePackaging = 'bubbleMailer';
+                } else if (effectiveItemType === 'card' && effectiveItemWeight > 29) {
+                    effectivePackaging = 'box';
+                }
+                if (['booster', 'etb', 'collection'].includes(document.getElementById('boxPreset').value)) {
+                    effectivePackaging = 'box';
+                    effectiveItemType = 'box';
+                    effectiveItemWeight = boxPresets[document.getElementById('boxPreset').value]?.weight || effectiveItemWeight;
+                }
+            }
+
+            let totalSupplyCost = 0;
+            if (shippingDetailsVisible && effectiveItemType === 'card' && effectivePackaging === 'envelope') {
+                totalSupplyCost = supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag + supplyCosts.paper + supplyCosts.envelope +
+                                  (effectiveItemWeight <= 1 ? supplyCosts.stampFirstOz : supplyCosts.stampFirstOz + (Math.ceil(effectiveItemWeight - 1) * supplyCosts.stampAdditionalOz));
+            } else if (effectivePackaging === 'bubbleMailer') {
+                totalSupplyCost = supplyCosts.bubbleMailer + supplyCosts.tapeLabels;
+                if (effectiveItemType === 'card') {
+                    totalSupplyCost += supplyCosts.pennySleeve + supplyCosts.toploader + supplyCosts.teamBag;
+                }
+            } else {
+                totalSupplyCost = (effectiveItemWeight <= 27.2 ? supplyCosts.mediumBox : supplyCosts.largeBox) + supplyCosts.tapeLabels;
+            }
+
+            const salePrices = Array.from({ length: 50 }, (_, i) => i + 1);
+            const margins = salePrices.map(salePrice => {
+                const feeBase = buyerPaysShipping ? salePrice + shippingCost : salePrice;
+                const totalFees = (feeBase * platformFees.salesFeePercent) +
+                                  (salePrice * platformFees.paymentFeePercent) +
+                                  platformFees.paymentFeeFixed +
+                                  platformFees.transactionFee;
+                const taxAmount = salePrice * (taxRate / 100);
+                const netProfit = salePrice - itemCost - (buyerPaysShipping ? 0 : shippingCost) - totalFees - taxAmount - totalSupplyCost;
+                return (netProfit / salePrice) * 100;
+            });
+
+            marginChart.data.labels = salePrices;
+            marginChart.data.datasets[0].data = margins;
+            marginChart.update();
+            console.log('Margin Chart Updated:', { salePrices, margins, effectivePackaging, effectiveItemWeight, totalSupplyCost });
+        }
+    </script>
+</body>
+</html>
